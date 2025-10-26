@@ -1,3 +1,7 @@
+> [!NOTE]
+> This is a fork of the original repo at https://codeberg.org/river/river.
+> It contains my changes which make river more dwm-like.
+
 <div align="center">
   <img src="logo/logo_text_adaptive_color.svg" width="600em">
 </div>
