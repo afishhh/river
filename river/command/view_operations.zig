@@ -47,6 +47,7 @@ pub fn focusView(
         seat,
         result.args[0],
         if (result.flags.@"skip-floating") .skip_float else .all,
+        false,
     )) |target| {
         assert(!target.pending.fullscreen);
         seat.focus(target, true);
@@ -63,7 +64,7 @@ pub fn swap(
     if (args.len < 2) return Error.NotEnoughArguments;
     if (args.len > 2) return Error.TooManyArguments;
 
-    if (try getTarget(seat, args[1], .skip_float)) |target| {
+    if (try getTarget(seat, args[1], .skip_float, true)) |target| {
         assert(!target.pending.float);
         assert(!target.pending.fullscreen);
         seat.focused.view.pending_wm_stack_link.swapWith(&target.pending_wm_stack_link);
@@ -73,7 +74,7 @@ pub fn swap(
 }
 
 const TargetMode = enum { all, skip_float };
-fn getTarget(seat: *Seat, direction_str: []const u8, target_mode: TargetMode) !?*View {
+fn getTarget(seat: *Seat, direction_str: []const u8, target_mode: TargetMode, allow_master: bool) !?*View {
     if (seat.focused != .view) return null;
     if (seat.focused.view.pending.fullscreen) return null;
     if (target_mode == .skip_float and seat.focused.view.pending.float) return null;
@@ -139,6 +140,25 @@ fn getTarget(seat: *Seat, direction_str: []const u8, target_mode: TargetMode) !?
             }
         }
         return target;
+    }
+
+    if (allow_master and std.mem.eql(u8, direction_str, "master")) {
+        var it = output.pending.wm_stack.iterator(.forward);
+        const master = while (it.next()) |view| {
+            if (output.pending.tags & view.pending.tags == 0) continue;
+            if (view.pending.float) continue;
+            break view;
+        } else {
+            unreachable;
+        };
+
+        if (seat.focused.view == master) {
+            return it.next();
+        } else {
+            return master;
+        }
+
+        unreachable;
     }
 
     return Error.InvalidDirection;

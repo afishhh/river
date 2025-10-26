@@ -80,7 +80,7 @@ necessarily disjunct), an analogy to workspaces.
 	*spawn* only takes a single argument. To spawn a command taking
 	multiple arguments, wrapping the command in quotes is recommended.
 
-*swap* *next*|*previous*|*up*|*down*|*left*|*right*
+*swap* *next*|*previous*|*up*|*down*|*left*|*right*|*master*
 	Swap the focused view with the next or previous non-floating view in the
 	stack or the closest non-floating view in any direction.
 
