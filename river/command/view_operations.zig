@@ -49,7 +49,7 @@ pub fn focusView(
         if (result.flags.@"skip-floating") .skip_float else .all,
     )) |target| {
         assert(!target.pending.fullscreen);
-        seat.focus(target);
+        seat.focus(target, true);
         server.root.applyPending();
     }
 }

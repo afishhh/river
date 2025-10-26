@@ -44,14 +44,16 @@ const log = std.log.scoped(.output);
 pub const PendingState = struct {
     /// A bit field of focused tags
     tags: u32 = 1 << 0,
-    /// The stack of views in focus/rendering order.
+    /// The stack of views in focus order.
     ///
     /// This contains views that aren't currently visible because they do not
     /// match the tags of the output.
+    focus_stack: wl.list.Head(View, .pending_focus_stack_link),
+    /// The stack of views in rendering order.
     ///
     /// This list is used to update the rendering order of nodes in the scene
     /// graph when the pending state is committed.
-    focus_stack: wl.list.Head(View, .pending_focus_stack_link),
+    render_stack: wl.list.Head(View, .pending_render_stack_link),
     /// The stack of views acted upon by window management commands such
     /// as focus-view, zoom, etc.
     ///
@@ -143,6 +145,8 @@ inflight: struct {
     tags: u32 = 1 << 0,
     /// See pending.focus_stack
     focus_stack: wl.list.Head(View, .inflight_focus_stack_link),
+    /// See pending.render_stack
+    render_stack: wl.list.Head(View, .inflight_render_stack_link),
     /// See pending.wm_stack
     wm_stack: wl.list.Head(View, .inflight_wm_stack_link),
     /// The view to be made fullscreen, if any.
@@ -277,10 +281,12 @@ pub fn create(wlr_output: *wlr.Output) !void {
         },
         .pending = .{
             .focus_stack = undefined,
+            .render_stack = undefined,
             .wm_stack = undefined,
         },
         .inflight = .{
             .focus_stack = undefined,
+            .render_stack = undefined,
             .wm_stack = undefined,
         },
         .usable_box = .{
@@ -294,8 +300,10 @@ pub fn create(wlr_output: *wlr.Output) !void {
     wlr_output.data = output;
 
     output.pending.focus_stack.init();
+    output.pending.render_stack.init();
     output.pending.wm_stack.init();
     output.inflight.focus_stack.init();
+    output.inflight.render_stack.init();
     output.inflight.wm_stack.init();
 
     output.status.init();
@@ -412,8 +420,10 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     server.root.deactivateOutput(output);
 
     assert(output.pending.focus_stack.empty());
+    assert(output.pending.render_stack.empty());
     assert(output.pending.wm_stack.empty());
     assert(output.inflight.focus_stack.empty());
+    assert(output.inflight.render_stack.empty());
     assert(output.inflight.wm_stack.empty());
     assert(output.inflight.layout_demand == null);
     assert(output.layouts.len == 0);

@@ -91,7 +91,8 @@ fn handleForeignActivate(
     const view: *View = @fieldParentPtr("foreign_toplevel_handle", handle);
     const seat: *Seat = @alignCast(@ptrCast(event.seat.data));
 
-    seat.focus(view);
+    // Not raising here could be *very* surprising.
+    seat.focus(view, true);
     server.root.applyPending();
 }
 

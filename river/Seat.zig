@@ -156,7 +156,7 @@ pub fn deinit(seat: *Seat) void {
 /// Set the current focus. If a visible view is passed it will be focused.
 /// If null is passed, the top view in the stack of the focused output will be focused.
 /// Requires a call to Root.applyPending()
-pub fn focus(seat: *Seat, _target: ?*View) void {
+pub fn focus(seat: *Seat, _target: ?*View, raise: bool) void {
     var target = _target;
 
     // Don't change focus if there are no outputs.
@@ -221,6 +221,10 @@ pub fn focus(seat: *Seat, _target: ?*View) void {
     if (target) |view| {
         view.pending_focus_stack_link.remove();
         seat.focused_output.?.pending.focus_stack.prepend(view);
+        if (raise) {
+            view.pending_render_stack_link.remove();
+            seat.focused_output.?.pending.render_stack.prepend(view);
+        }
         seat.setFocusRaw(.{ .view = view });
     } else {
         seat.setFocusRaw(.{ .none = {} });

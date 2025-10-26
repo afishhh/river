@@ -59,11 +59,13 @@ hidden: struct {
 
     pending: struct {
         focus_stack: wl.list.Head(View, .pending_focus_stack_link),
+        render_stack: wl.list.Head(View, .pending_render_stack_link),
         wm_stack: wl.list.Head(View, .pending_wm_stack_link),
     },
 
     inflight: struct {
         focus_stack: wl.list.Head(View, .inflight_focus_stack_link),
+        render_stack: wl.list.Head(View, .inflight_render_stack_link),
         wm_stack: wl.list.Head(View, .inflight_wm_stack_link),
     },
 },
@@ -150,15 +152,18 @@ pub fn init(root: *Root) !void {
             .tree = hidden_tree,
             .pending = .{
                 .focus_stack = undefined,
+                .render_stack = undefined,
                 .wm_stack = undefined,
             },
             .inflight = .{
                 .focus_stack = undefined,
+                .render_stack = undefined,
                 .wm_stack = undefined,
             },
         },
         .fallback_pending = .{
             .focus_stack = undefined,
+            .render_stack = undefined,
             .wm_stack = undefined,
         },
         .views = undefined,
@@ -174,11 +179,14 @@ pub fn init(root: *Root) !void {
         .transaction_timeout = transaction_timeout,
     };
     root.hidden.pending.focus_stack.init();
+    root.hidden.pending.render_stack.init();
     root.hidden.pending.wm_stack.init();
     root.hidden.inflight.focus_stack.init();
+    root.hidden.inflight.render_stack.init();
     root.hidden.inflight.wm_stack.init();
 
     root.fallback_pending.focus_stack.init();
+    root.fallback_pending.render_stack.init();
     root.fallback_pending.wm_stack.init();
 
     root.views.init();
@@ -288,6 +296,9 @@ pub fn deactivateOutput(root: *Root, output: *Output) void {
             view.inflight_focus_stack_link.remove();
             view.inflight_focus_stack_link.init();
 
+            view.inflight_render_stack_link.remove();
+            view.inflight_render_stack_link.init();
+
             view.inflight_wm_stack_link.remove();
             view.inflight_wm_stack_link.init();
 
@@ -317,8 +328,9 @@ pub fn deactivateOutput(root: *Root, output: *Output) void {
     } else {
         var it = output.pending.focus_stack.iterator(.forward);
         while (it.next()) |view| view.pending.output = null;
-        root.fallback_pending.focus_stack.prependList(&output.pending.focus_stack);
-        root.fallback_pending.wm_stack.prependList(&output.pending.wm_stack);
+        root.fallback_pending.focus_stack.appendList(&output.pending.focus_stack);
+        root.fallback_pending.render_stack.appendList(&output.pending.render_stack);
+        root.fallback_pending.wm_stack.appendList(&output.pending.wm_stack);
         // Store the focused output tags if we are hotplugged down to
         // 0 real outputs so they can be restored on gaining a new output.
         root.fallback_pending.tags = output.pending.tags;
@@ -419,6 +431,7 @@ pub fn activateOutput(root: *Root, output: *Output) void {
         }
     }
     assert(root.fallback_pending.focus_stack.empty());
+    assert(root.fallback_pending.render_stack.empty());
     assert(root.fallback_pending.wm_stack.empty());
 
     // Enforce map-to-output configuration for the newly active output.
@@ -436,7 +449,7 @@ pub fn applyPending(root: *Root) void {
         // around the codebase and risk forgetting one, always ensure focus
         // state is synchronized here.
         var it = server.input_manager.seats.first;
-        while (it) |node| : (it = node.next) node.data.focus(null);
+        while (it) |node| : (it = node.next) node.data.focus(null, false);
     }
 
     // If there is already a transaction inflight, wait until it completes.
@@ -453,6 +466,14 @@ pub fn applyPending(root: *Root) void {
             view.inflight.output = null;
             view.inflight_focus_stack_link.remove();
             root.hidden.inflight.focus_stack.append(view);
+        }
+    }
+
+    {
+        var it = root.hidden.pending.render_stack.iterator(.forward);
+        while (it.next()) |view| {
+            view.inflight_render_stack_link.remove();
+            root.hidden.inflight.render_stack.append(view);
         }
     }
 
@@ -503,6 +524,14 @@ pub fn applyPending(root: *Root) void {
                     output.inflight.focus_stack.append(view);
 
                     view.inflight = view.pending;
+                }
+            }
+
+            {
+                var it = output.pending.render_stack.iterator(.forward);
+                while (it.next()) |view| {
+                    view.inflight_render_stack_link.remove();
+                    output.inflight.render_stack.append(view);
                 }
             }
 
@@ -676,8 +705,8 @@ fn commitTransaction(root: *Root) void {
         }
         output.current.tags = output.inflight.tags;
 
-        var focus_stack_it = output.inflight.focus_stack.iterator(.forward);
-        while (focus_stack_it.next()) |view| {
+        var render_stack_it = output.inflight.render_stack.iterator(.forward);
+        while (render_stack_it.next()) |view| {
             assert(view.inflight.output == output);
 
             if (view.inflight.float) {

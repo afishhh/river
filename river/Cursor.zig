@@ -457,7 +457,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
 fn updateKeyboardFocus(cursor: Cursor, result: Root.AtResult) void {
     switch (result.data) {
         .view => |view| {
-            cursor.seat.focus(view);
+            cursor.seat.focus(view, false);
         },
         .layer_surface => |layer_surface| {
             cursor.seat.focusOutput(layer_surface.output);
@@ -719,13 +719,13 @@ fn handlePointerMapping(cursor: *Cursor, event: *wlr.Pointer.event.Button, view:
 
     const fullscreen = view.current.fullscreen or view.pending.fullscreen;
 
-    return for (server.config.modes.items[cursor.seat.mode_id].pointer_mappings.items) |mapping| {
+    for (server.config.modes.items[cursor.seat.mode_id].pointer_mappings.items) |mapping| {
         if (event.button == mapping.event_code and std.meta.eql(modifiers, mapping.modifiers)) {
             switch (mapping.action) {
                 .move => if (!fullscreen) cursor.startMove(view),
                 .resize => if (!fullscreen) cursor.startResize(view, null),
                 .command => |args| {
-                    cursor.seat.focus(view);
+                    cursor.seat.focus(view, true);
                     cursor.seat.runCommand(args);
                     // This is mildly inefficient as running the command may have already
                     // started a transaction. However we need to start one after the Seat.focus()
@@ -733,9 +733,12 @@ fn handlePointerMapping(cursor: *Cursor, event: *wlr.Pointer.event.Button, view:
                     server.root.applyPending();
                 },
             }
-            break true;
+            return true;
         }
-    } else false;
+    } else {
+        cursor.seat.focus(view, true);
+        return false;
+    }
 }
 
 /// Frame events are sent after regular pointer events to group multiple
@@ -940,7 +943,7 @@ fn enterMode(cursor: *Cursor, mode: Mode, view: *View, xcursor: [*:0]const u8) v
 
     cursor.mode = mode;
 
-    cursor.seat.focus(view);
+    cursor.seat.focus(view, true);
 
     if (view.current.output.?.layout != null) {
         view.float_box = view.current.box;
@@ -1093,7 +1096,7 @@ pub fn checkFocusFollowsCursor(cursor: *Cursor) void {
         if (cursor.seat.focused != .view or cursor.seat.focused.view != view) {
             if (view.current.output) |output| {
                 cursor.seat.focusOutput(output);
-                cursor.seat.focus(view);
+                cursor.seat.focus(view, false);
                 server.root.applyPending();
             }
         }
