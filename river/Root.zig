@@ -342,16 +342,15 @@ pub fn deactivateOutput(root: *Root, output: *Output) void {
         var it = tree.children.safeIterator(.forward);
         while (it.next()) |scene_node| {
             assert(scene_node.type == .tree);
-            if (@as(?*SceneNodeData, @alignCast(@ptrCast(scene_node.data)))) |node_data| {
+            if (@as(?*SceneNodeData, @ptrCast(@alignCast(scene_node.data)))) |node_data| {
                 node_data.data.layer_surface.wlr_layer_surface.destroy();
             }
         }
     }
 
     // If any seat has the removed output focused, focus the fallback one
-    var seat_it = server.input_manager.seats.first;
-    while (seat_it) |seat_node| : (seat_it = seat_node.next) {
-        const seat = &seat_node.data;
+    var seat_it = server.input_manager.seats.iterator(.forward);
+    while (seat_it.next()) |seat| {
         if (seat.focused_output == output) {
             seat.focusOutput(fallback_output);
         }
@@ -365,7 +364,7 @@ pub fn deactivateOutput(root: *Root, output: *Output) void {
         output.inflight.layout_demand = null;
         root.notifyLayoutDemandDone();
     }
-    while (output.layouts.first) |node| node.data.destroy();
+    while (output.layouts.first()) |layout| layout.destroy();
 
     // We must call reconfigureDevices here to unmap devices that might be mapped to this output
     // in order to prevent a segfault in wlroots.
@@ -409,9 +408,8 @@ pub fn activateOutput(root: *Root, output: *Output) void {
         }
         {
             // Focus the new output with all seats
-            var it = server.input_manager.seats.first;
-            while (it) |seat_node| : (it = seat_node.next) {
-                const seat = &seat_node.data;
+            var it = server.input_manager.seats.iterator(.forward);
+            while (it.next()) |seat| {
                 seat.focusOutput(output);
             }
         }
@@ -448,8 +446,8 @@ pub fn applyPending(root: *Root) void {
         // state consistent. Instead of having focus(null) calls spread all
         // around the codebase and risk forgetting one, always ensure focus
         // state is synchronized here.
-        var it = server.input_manager.seats.first;
-        while (it) |node| : (it = node.next) node.data.focus(null, false);
+        var it = server.input_manager.seats.iterator(.forward);
+        while (it.next()) |seat| seat.focus(null, false);
     }
 
     // If there is already a transaction inflight, wait until it completes.
@@ -575,11 +573,9 @@ pub fn applyPending(root: *Root) void {
     }
 
     {
-        var it = server.input_manager.seats.first;
-        while (it) |node| : (it = node.next) {
-            const cursor = &node.data.cursor;
-
-            switch (cursor.mode) {
+        var it = server.input_manager.seats.iterator(.forward);
+        while (it.next()) |seat| {
+            switch (seat.cursor.mode) {
                 .passthrough, .down => {},
                 inline .move, .resize => |data| {
                     if (data.view.inflight.output == null or
@@ -587,14 +583,14 @@ pub fn applyPending(root: *Root) void {
                         (!data.view.inflight.float and data.view.inflight.output.?.layout != null) or
                         data.view.inflight.fullscreen)
                     {
-                        cursor.mode = .passthrough;
+                        seat.cursor.mode = .passthrough;
                         data.view.pending.resizing = false;
                         data.view.inflight.resizing = false;
                     }
                 },
             }
 
-            cursor.inflight_mode = cursor.mode;
+            seat.cursor.inflight_mode = seat.cursor.mode;
         }
     }
 
@@ -739,8 +735,8 @@ fn commitTransaction(root: *Root) void {
     }
 
     {
-        var it = server.input_manager.seats.first;
-        while (it) |node| : (it = node.next) node.data.cursor.updateState();
+        var it = server.input_manager.seats.iterator(.forward);
+        while (it.next()) |seat| seat.cursor.updateState();
     }
 
     {
@@ -831,7 +827,7 @@ fn processOutputConfig(
     var it = config.heads.iterator(.forward);
     while (it.next()) |head| {
         const wlr_output = head.state.output;
-        const output: *Output = @alignCast(@ptrCast(wlr_output.data));
+        const output: *Output = @ptrCast(@alignCast(wlr_output.data));
 
         var proposed_state = wlr.Output.State.init();
         head.state.apply(&proposed_state);
@@ -870,7 +866,7 @@ fn handlePowerManagerSetMode(
     event: *wlr.OutputPowerManagerV1.event.SetMode,
 ) void {
     // The output may have been destroyed, in which case there is nothing to do
-    const output: *Output = @alignCast(@ptrCast(event.output.data orelse return));
+    const output: *Output = @ptrCast(@alignCast(event.output.data orelse return));
 
     std.log.debug("client requested dpms {s} for output {s}", .{
         @tagName(event.mode),

@@ -65,12 +65,11 @@ pub fn destroy(lock_surface: *LockSurface) void {
         var surface_it = lock_surface.lock.surfaces.iterator(.forward);
         const new_focus: Seat.FocusTarget = while (surface_it.next()) |surface| {
             if (surface != lock_surface.wlr_lock_surface)
-                break .{ .lock_surface = @alignCast(@ptrCast(surface.data)) };
+                break .{ .lock_surface = @ptrCast(@alignCast(surface.data)) };
         } else .none;
 
-        var seat_it = server.input_manager.seats.first;
-        while (seat_it) |node| : (seat_it = node.next) {
-            const seat = &node.data;
+        var seat_it = server.input_manager.seats.iterator(.forward);
+        while (seat_it.next()) |seat| {
             if (seat.focused == .lock_surface and seat.focused.lock_surface == lock_surface) {
                 seat.setFocusRaw(new_focus);
             }
@@ -92,7 +91,7 @@ pub fn destroy(lock_surface: *LockSurface) void {
 }
 
 pub fn getOutput(lock_surface: *LockSurface) *Output {
-    return @alignCast(@ptrCast(lock_surface.wlr_lock_surface.output.data));
+    return @ptrCast(@alignCast(lock_surface.wlr_lock_surface.output.data));
 }
 
 pub fn configure(lock_surface: *LockSurface) void {
@@ -122,9 +121,8 @@ fn handleMap(listener: *wl.Listener(void)) void {
 }
 
 fn updateFocus(lock_surface: *LockSurface) void {
-    var it = server.input_manager.seats.first;
-    while (it) |node| : (it = node.next) {
-        const seat = &node.data;
+    var it = server.input_manager.seats.iterator(.forward);
+    while (it.next()) |seat| {
         if (seat.focused != .lock_surface) {
             seat.setFocusRaw(.{ .lock_surface = lock_surface });
         }

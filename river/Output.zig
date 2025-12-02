@@ -171,7 +171,7 @@ previous_tags: u32 = 1 << 0,
 attach_mode: ?Config.AttachMode = null,
 
 /// List of all layouts
-layouts: std.DoublyLinkedList(Layout) = .{},
+layouts: wl.list.Head(Layout, .link),
 
 /// The current layout namespace of the output. If null,
 /// config.default_layout_namespace should be used instead.
@@ -296,8 +296,11 @@ pub fn create(wlr_output: *wlr.Output) !void {
             .height = height,
         },
         .status = undefined,
+        .layouts = undefined,
     };
     wlr_output.data = output;
+
+    output.layouts.init();
 
     output.pending.focus_stack.init();
     output.pending.render_stack.init();
@@ -368,7 +371,7 @@ fn sendLayerConfigures(
         var it = tree.children.safeIterator(.forward);
         while (it.next()) |node| {
             assert(node.type == .tree);
-            if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
+            if (@as(?*SceneNodeData, @ptrCast(@alignCast(node.data)))) |node_data| {
                 const layer_surface = node_data.data.layer_surface;
 
                 if (!layer_surface.wlr_layer_surface.initialized) continue;
@@ -426,7 +429,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     assert(output.inflight.render_stack.empty());
     assert(output.inflight.wm_stack.empty());
     assert(output.inflight.layout_demand == null);
-    assert(output.layouts.len == 0);
+    assert(output.layouts.length() == 0);
 
     output.all_link.remove();
 
@@ -462,7 +465,7 @@ fn handleRequestState(listener: *wl.Listener(*wlr.Output.event.RequestState), ev
 // TODO double buffer output state changes for frame perfection and cleaner code.
 // Schedule a frame and commit in the frame handler.
 // Get rid of this function.
-pub fn applyState(output: *Output, state: *wlr.Output.State) error{CommitFailed}!void {
+pub fn applyState(output: *Output, state: *const wlr.Output.State) error{CommitFailed}!void {
 
     // We need to be precise about this state change to make assertions
     // in updateLockRenderStateOnEnableDisable() possible.
@@ -629,7 +632,7 @@ fn handlePresent(
 }
 
 fn setTitle(output: Output) void {
-    const title = fmt.allocPrintZ(util.gpa, "river - {s}", .{output.wlr_output.name}) catch return;
+    const title = fmt.allocPrintSentinel(util.gpa, "river - {s}", .{output.wlr_output.name}, 0) catch return;
     defer util.gpa.free(title);
     if (output.wlr_output.isWl()) {
         output.wlr_output.wlSetTitle(title);
@@ -641,9 +644,9 @@ fn setTitle(output: Output) void {
 pub fn handleLayoutNamespaceChange(output: *Output) void {
     // The user changed the layout namespace of this output. Try to find a
     // matching layout.
-    var it = output.layouts.first;
-    output.layout = while (it) |node| : (it = node.next) {
-        if (mem.eql(u8, output.layoutNamespace(), node.data.namespace)) break &node.data;
+    var it = output.layouts.iterator(.forward);
+    output.layout = while (it.next()) |layout| {
+        if (mem.eql(u8, output.layoutNamespace(), layout.namespace)) break layout;
     } else null;
     server.root.applyPending();
 }

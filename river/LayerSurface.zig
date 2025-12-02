@@ -43,7 +43,7 @@ commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit)
 new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
 
 pub fn create(wlr_layer_surface: *wlr.LayerSurfaceV1) error{OutOfMemory}!void {
-    const output: *Output = @alignCast(@ptrCast(wlr_layer_surface.output.?.data));
+    const output: *Output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
     const layer_surface = try util.gpa.create(LayerSurface);
     errdefer util.gpa.destroy(layer_surface);
 
@@ -157,7 +157,7 @@ fn handleKeyboardInteractiveExclusive(output: *Output, consider: ?*LayerSurface)
         var it = tree.children.iterator(.reverse);
         while (it.next()) |node| {
             assert(node.type == .tree);
-            if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
+            if (@as(?*SceneNodeData, @ptrCast(@alignCast(node.data)))) |node_data| {
                 const layer_surface = node_data.data.layer_surface;
                 const wlr_layer_surface = layer_surface.wlr_layer_surface;
                 if (wlr_layer_surface.surface.mapped and
@@ -173,10 +173,8 @@ fn handleKeyboardInteractiveExclusive(output: *Output, consider: ?*LayerSurface)
         assert(s.wlr_layer_surface.current.keyboard_interactive != .none);
     }
 
-    var it = server.input_manager.seats.first;
-    while (it) |node| : (it = node.next) {
-        const seat = &node.data;
-
+    var it = server.input_manager.seats.iterator(.forward);
+    while (it.next()) |seat| {
         if (seat.focused_output == output) {
             if (to_focus) |s| {
                 // If we found a surface on the output that requires focus, grab the focus of all
